@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI/ML Task 2: SOC Triage Agent</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* Custom Styles for a Professional Chat Interface */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7fafc;
+        }
+        .chat-container {
+            max-height: 80vh;
+            overflow-y: auto;
+            scroll-behavior: smooth;
+            padding-bottom: 1rem; /* Ensure space above input */
+        }
+        .agent-bubble {
+            /* Professional security blue/teal color scheme */
+            background-color: #e6fffa; 
+            border-left: 4px solid #38b2ac; /* Teal border for agent authority */
+        }
+        .user-bubble {
+            background-color: #ebf4ff; /* Light blue for user input */
+        }
+        .loading-dot {
+            /* Simple CSS animation for loading state */
+            animation: dot-flashing 1s infinite alternate;
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            margin: 0 2px;
+            background-color: #38b2ac;
+            border-radius: 50%;
+        }
+        .loading-dot:nth-child(2) { animation-delay: 0.3s; }
+        .loading-dot:nth-child(3) { animation-delay: 0.6s; }
+
+        @keyframes dot-flashing {
+            0% { opacity: 0.2; }
+            100% { opacity: 1; }
+        }
+    </style>
+</head>
+<body class="p-4 bg-gray-100 min-h-screen flex items-center justify-center">
+
+    <div class="w-full max-w-2xl bg-white shadow-xl rounded-2xl overflow-hidden flex flex-col h-[90vh]">
+        <!-- Header -->
+        <header class="p-4 bg-gray-800 text-white shadow-lg flex items-center justify-between">
+            <h1 class="text-xl font-bold">Threat Intelligence & Triage Agent</h1>
+            <span class="text-sm font-light bg-teal-600 px-3 py-1 rounded-full">Gemini Powered SOC Tool</span>
+        </header>
+
+        <!-- Chat Area -->
+        <div id="chat-messages" class="chat-container flex-grow p-4 space-y-4">
+            <!-- Initial Agent Message -->
+            <div class="flex justify-start">
+                <div class="agent-bubble p-3 rounded-xl max-w-xs shadow">
+                    <p class="text-gray-700 font-semibold">Hello, I am your SOC Triage Agent.</p>
+                    <p class="text-sm text-gray-600 mt-1">Ask me to look up the latest CVEs, explain a complex security term, or triage a potential attack vector.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Input Area -->
+        <div class="p-4 border-t border-gray-200">
+            <form id="chat-form" class="flex space-x-3">
+                <input type="text" id="user-input" placeholder="e.g., What is the latest CVE related to Log4j?" 
+                       class="flex-grow p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 transition duration-150"
+                       required>
+                <button type="submit" id="send-button"
+                        class="bg-teal-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-teal-700 transition duration-150 disabled:bg-gray-400">
+                    Send
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // ====================================================================
+        // GEMINI API CONFIGURATION
+        // ====================================================================
+        const API_MODEL = "gemini-2.5-flash-preview-09-2025";
+        const API_KEY = ""; // Canvas provides this key automatically at runtime
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${API_MODEL}:generateContent?key=${API_KEY}`;
+        
+        // DOM Elements
+        const chatMessages = document.getElementById('chat-messages');
+        const chatForm = document.getElementById('chat-form');
+        const userInput = document.getElementById('user-input');
+        const sendButton = document.getElementById('send-button');
+
+        // System Instruction: Defines the Agent's Persona and Rules
+        const systemPrompt = `
+            You are a highly efficient, Tier 1 SOC (Security Operations Center) Triage Agent.
+            Your primary function is to analyze user queries (which represent security incidents, threat alerts, or requests for threat intelligence)
+            and provide a concise, factual, and actionable response.
+            
+            RULES:
+            1. Always use the Google Search tool for queries regarding current events, specific CVEs, latest attack vectors, or external threat information. This is mandatory for grounding.
+            2. The output must be concise (max 3-4 sentences) and directly address the user's security concern.
+            3. You MUST include the grounding sources at the end of the response when using the search tool.
+            4. Maintain a professional, helpful, and analytical tone.
+            5. Provide a clear, actionable next step for the analyst where appropriate (e.g., "Recommend patching immediately," "Isolate the host," or "Escalate to Tier 2").
+        `;
+
+        // ====================================================================
+        // UTILITY FUNCTIONS
+        // ====================================================================
+
+        /**
+         * Converts simplified Markdown text (like **bold**) to HTML.
+         * @param {string} text - The raw text from the LLM.
+         * @returns {string} HTML formatted text.
+         */
+        function formatMarkdown(text) {
+            let html = text.replace(/\n/g, '<br>');
+            html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+            html = html.replace(/^- /gm, '• '); // Basic list formatting
+            return html;
+        }
+
+        /**
+         * Converts Base64 data to an ArrayBuffer for audio processing (for TTS, not used here, but good practice).
+         * @param {string} base64 - Base64 encoded string.
+         * @returns {ArrayBuffer}
+         */
+        function base64ToArrayBuffer(base64) {
+            const binaryString = atob(base64);
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            return bytes.buffer;
+        }
+
+       
+        async function fetchAgentResponse(query) {
+            const payload = {
+                contents: [{ parts: [{ text: query }] }],
+                // MANDATORY: Enable Google Search grounding tool
+                tools: [{ "google_search": {} }], 
+                systemInstruction: {
+                    parts: [{ text: systemPrompt }]
+                },
+                generationConfig: {
+                    temperature: 0.1 // Keep responses factual and less creative
+                }
+            };
+
+            const maxRetries = 5;
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (!response.ok) {
+                        // Handle server-side errors
+                        const errorBody = await response.text();
+                        throw new Error(`HTTP error! Status: ${response.status}. Body: ${errorBody.substring(0, 100)}...`);
+                    }
+
+                    const result = await response.json();
+                    const candidate = result.candidates?.[0];
+
+                    if (candidate && candidate.content?.parts?.[0]?.text) {
+                        const text = candidate.content.parts[0].text;
+                        
+                        // Extract grounding sources
+                        let sources = [];
+                        const groundingMetadata = candidate.groundingMetadata;
+                        if (groundingMetadata && groundingMetadata.groundingAttributions) {
+                            sources = groundingMetadata.groundingAttributions
+                                .map(attribution => ({
+                                    uri: attribution.web?.uri,
+                                    title: attribution.web?.title,
+                                }))
+                                .filter(source => source.uri && source.title); // Filter out invalid sources
+                        }
+
+                        return { text, sources };
+                    } else {
+                        throw new Error("Received empty or malformed content from the LLM.");
+                    }
+                } catch (error) {
+                    console.error(`LLM Request Attempt ${i + 1} failed:`, error);
+                    if (i === maxRetries - 1) {
+                        throw new Error("LLM request failed after multiple retries.");
+                    }
+                    // Exponential backoff delay (1s, 2s, 4s, 8s, ...)
+                    const delay = Math.pow(2, i) * 1000;
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                }
+            }
+        }
+        
+        
+        function appendMessage(sender, text, sources = []) {
+            const messageElement = document.createElement('div');
+            messageElement.classList.add('flex', sender === 'user' ? 'justify-end' : 'justify-start');
+
+            let contentHTML = formatMarkdown(text);
+            let sourcesHTML = '';
+
+            if (sources.length > 0) {
+                // Dedup sources to keep the UI clean
+                const uniqueSources = Array.from(new Map(sources.map(item => [item.uri, item])).values());
+                sourcesHTML = `
+                    <div class="mt-2 pt-2 border-t border-gray-300 text-xs text-gray-500">
+                        <p class="font-bold mb-1 text-gray-700">Sources (Grounding):</p>
+                        <ul class="list-none p-0 space-y-1">
+                            ${uniqueSources.map(s => 
+                                `<li>
+                                    <a href="${s.uri}" target="_blank" class="text-teal-700 hover:underline">
+                                        <!-- Truncate title for clean UI -->
+                                        ${s.title ? s.title.substring(0, 50) + (s.title.length > 50 ? '...' : '') : 'Link'}
+                                    </a>
+                                </li>`
+                            ).join('')}
+                        </ul>
+                    </div>
+                `;
+            }
+
+            const bubbleClass = sender === 'user' ? 'user-bubble' : 'agent-bubble border-l-4 border-teal-600';
+            
+            messageElement.innerHTML = `
+                <div class="${bubbleClass} p-3 rounded-xl max-w-xs shadow-md">
+                    <p class="text-sm text-gray-800">${contentHTML}</p>
+                    ${sourcesHTML}
+                </div>
+            `;
+            chatMessages.appendChild(messageElement);
+            
+            // Scroll to the bottom immediately
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        /** Shows the typing indicator. */
+        function showLoadingIndicator() {
+            const loadingElement = document.createElement('div');
+            loadingElement.id = 'loading-indicator';
+            loadingElement.classList.add('flex', 'justify-start');
+            loadingElement.innerHTML = `
+                <div class="agent-bubble p-3 rounded-xl max-w-xs shadow">
+                    <span class="text-gray-600">Agent Triage in Progress</span>
+                    <span class="loading-dot"></span>
+                    <span class="loading-dot"></span>
+                    <span class="loading-dot"></span>
+                </div>
+            `;
+            chatMessages.appendChild(loadingElement);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+            return loadingElement;
+        }
+
+        /** Removes the typing indicator. */
+        function removeLoadingIndicator(indicator) {
+            if (indicator) {
+                indicator.remove();
+            }
+        }
+
+        // --- Main Event Listener for Chat Submission ---
+        chatForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const query = userInput.value.trim();
+            if (!query) return;
+
+            // 1. Display user query and clear input
+            appendMessage('user', query);
+            userInput.value = '';
+            
+            // Disable input elements during API call
+            sendButton.disabled = true;
+            userInput.disabled = true; 
+            const loadingIndicator = showLoadingIndicator();
+
+            try {
+                // 2. Fetch agent response with real-time search
+                const { text, sources } = await fetchAgentResponse(query);
+                
+                // 3. Remove loading and display agent response
+                removeLoadingIndicator(loadingIndicator);
+                appendMessage('agent', text, sources);
+
+            } catch (error) {
+                console.error("Agent communication error:", error);
+                removeLoadingIndicator(loadingIndicator);
+                // Display error message to the user
+                appendMessage('agent', `[SYSTEM ALERT] Communication failure. Threat Intelligence Feed unavailable. Please check the console for details.`, []);
+            } finally {
+                // Re-enable input elements
+                sendButton.disabled = false;
+                userInput.disabled = false;
+                userInput.focus();
+            }
+        });
+    </script>
+</body>
+</html>
