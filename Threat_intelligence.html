@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI/ML Task 2: SOC Triage Agent</title>
+    <title>AI/ML Task 2: SOC Triangle Agent</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
@@ -50,7 +50,7 @@
     <div class="w-full max-w-2xl bg-white shadow-xl rounded-2xl overflow-hidden flex flex-col h-[90vh]">
         <!-- Header -->
         <header class="p-4 bg-gray-800 text-white shadow-lg flex items-center justify-between">
-            <h1 class="text-xl font-bold">Threat Intelligence & Triage Agent</h1>
+            <h1 class="text-xl font-bold">Threat Intelligence & Traingle Agent</h1>
             <span class="text-sm font-light bg-teal-600 px-3 py-1 rounded-full">Gemini Powered SOC Tool</span>
         </header>
 
@@ -59,8 +59,8 @@
             <!-- Initial Agent Message -->
             <div class="flex justify-start">
                 <div class="agent-bubble p-3 rounded-xl max-w-xs shadow">
-                    <p class="text-gray-700 font-semibold">Hello, I am your SOC Triage Agent.</p>
-                    <p class="text-sm text-gray-600 mt-1">Ask me to look up the latest CVEs, explain a complex security term, or triage a potential attack vector.</p>
+                    <p class="text-gray-700 font-semibold">Hello, I am your SOC Traingle Agent.</p>
+                    <p class="text-sm text-gray-600 mt-1">Ask me to look up the latest CVEs, explain a complex security term, or Traingle a potential attack vector.</p>
                 </div>
             </div>
         </div>
@@ -95,7 +95,7 @@
 
         // System Instruction: Defines the Agent's Persona and Rules
         const systemPrompt = `
-            You are a highly efficient, Tier 1 SOC (Security Operations Center) Triage Agent.
+            You are a highly efficient, Tier 1 SOC (Security Operations Center) Traingle Agent.
             Your primary function is to analyze user queries (which represent security incidents, threat alerts, or requests for threat intelligence)
             and provide a concise, factual, and actionable response.
             
@@ -250,7 +250,7 @@
             loadingElement.classList.add('flex', 'justify-start');
             loadingElement.innerHTML = `
                 <div class="agent-bubble p-3 rounded-xl max-w-xs shadow">
-                    <span class="text-gray-600">Agent Triage in Progress</span>
+                    <span class="text-gray-600">Agent Traingle in Progress</span>
                     <span class="loading-dot"></span>
                     <span class="loading-dot"></span>
                     <span class="loading-dot"></span>
